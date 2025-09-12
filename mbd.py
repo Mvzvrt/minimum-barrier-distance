@@ -1,6 +1,33 @@
 #!/usr/bin/env python3
 """
-minimum_barrier_distance.py
+Programmer Description:
+-------------------------
+This file, mbd.py, implements the Minimum Barrier Distance seeded segmentation algorithm.
+It is an industrial-grade, production-inspired implementation that computes segmentation masks based on exact barrier distance propagation.
+The label shifting is implemented to yield VOC-compliant outputs.
+
+Reference:
+@inbook{Strand_2014,
+  title={The Minimum Barrier Distance – Stability to Seed Point Position},
+  ISBN={9783642387098},
+  ISSN={1611-3349},
+  url={http://dx.doi.org/10.1007/978-3-319-09955-2_10},
+  DOI={10.1007/978-3-319-09955-2_10},
+  booktitle={Advanced Information Systems Engineering},
+  publisher={Springer Berlin Heidelberg},
+  author={Strand, Robin and Malmberg, Filip and Saha, Punam K. and Linnér, Elisabeth},
+  year={2014},
+  pages={111–121}
+}
+
+Implemented by: Mvzvrt
+
+License: MIT License
+Copyright (c) 2025 Mvzvrt
+"""
+
+"""
+mbd.py
 
 Seeded segmentation using Minimum Barrier Distance, exact objective and propagation.
 
@@ -37,7 +64,7 @@ try:
 except Exception:
     _USE_CPP = False
 
-METHOD_NAME = "minimum_barrier_distance"
+METHOD_NAME = "mbd"
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
 
 
