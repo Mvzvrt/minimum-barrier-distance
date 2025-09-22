@@ -159,34 +159,6 @@ python mbd.py --images_dir <your_image_directory> --anns_dir <your_annotation_di
 
 If you want to see full segmentation masks, do not set `--unlabeled-to-void`. Leaving it off keeps unlabeled pixels at index 0 before the save time shift, which then become palette index 0 after the shift. If you set `--unlabeled-to-void`, unlabeled class 0 will be saved as 255, many VOC tools treat this as ignore. For visualizing full masks, leave this flag out.
 
-## Seed densification flags
-
-The script performs seed densification using Felzenszwalb superpixels and simple color checks. You can tune it or turn it off.
-
-- `--no-densify-fh` disables densification
-- `--fh-scale`, integer, default 100
-- `--fh-sigma`, float, default 0.8
-- `--fh-min-size`, integer, default 20
-- `--fh-min-region-frac`, float in 0 to 1, default 0.20
-- `--fh-grow-color-thresh`, float in LAB units, default 25.0
-
-Example with custom densification parameters:
-
-```bash
-python fh_mbd.py \
-  --images_dir ... \
-  --anns_dir ... \
-  --output_dir ... \
-  --num-images 0 --start-one 1 --workers 0 --conn 4 \
-  --fh-scale 80 --fh-sigma 0.6 --fh-min-size 30 --fh-min-region-frac 0.15 --fh-grow-color-thresh 20.0
-```
-
-To disable densification completely:
-
-```bash
-python fh_mbd.py --images_dir ... --anns_dir ... --output_dir ... --no-densify-fh
-```
-
 ## Command line reference
 
 - `--images_dir`, required, folder containing input images
