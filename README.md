@@ -1,14 +1,20 @@
 # Minimum Barrier Distance, seeded image segmentation
 
-This project provides a training free, seeded segmentation pipeline that implements Minimum Barrier Distance, with an optional C++ core for speed and a seed densification step modeled after the batch pipeline you use. It accepts per image annotations, produces indexed PNG masks with a VOC colormap, and follows a simple, reproducible command line interface.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![NumPy](https://img.shields.io/badge/numpy-%23013243.svg?logo=numpy&logoColor=white)](https://numpy.org)
+[![scikit-image](https://img.shields.io/badge/scikit--image-%23F7931E.svg?logo=scikit-learn&logoColor=white)](https://scikit-image.org)
+[![Pillow](https://img.shields.io/badge/Pillow-%23EE4C2C.svg?logo=python&logoColor=white)](https://python-pillow.org)
+
+A high-performance implementation of the Minimum Barrier Distance (MBD) algorithm for seeded image segmentation. This project provides both a pure Python implementation and an optimized C++ version using pybind11 for efficient multi-label segmentation, along with an experimental seed densification feature. The pipeline accepts per-image annotations, produces VOC-compliant indexed PNG masks, and follows a simple, reproducible command line interface.
 
 ## Features
 
-* Exact Minimum Barrier Distance objective, multi label seeded propagation
-* Annotation convention, class 0 is unlabeled, class 1 is background, classes greater than 1 are foreground categories
-* Seed densification using Felzenszwalb regions, configurable by flags
-* VOC colormap saving, background is shown with palette index 0
-* Fast path via a C++ extension, Python fallback is available
+- Exact Minimum Barrier Distance objective, multi label seeded propagation
+- Annotation convention, class 0 is unlabeled, class 1 is background, classes greater than 1 are foreground categories
+- Seed densification using Felzenszwalb regions, configurable by flags
+- VOC colormap saving, background is shown with palette index 0
+- Fast path via a C++ extension, Python fallback is available
 
 ## Repository layout
 
@@ -21,43 +27,63 @@ minimum-barrier-distance/
   requirements.txt
 ```
 
-## Prerequisites
+## Requirements
 
-* Python 3.9 or newer is recommended
-* A working C or C++ compiler if you want the C++ core
-  * Windows, Microsoft C++ Build Tools installed, this comes with Visual Studio Build Tools
-  * macOS, Xcode Command Line Tools installed
-  * Linux, build-essential and a recent gcc or clang
+- **Python:** 3.9 or newer
+- **Core Libraries:**
+  - `numpy`
+  - `pillow`
+  - `scikit-image`
+  - `tqdm`
+- **C++ Dependencies:**
+  - Windows: Microsoft C++ Build Tools
+  - macOS: Xcode Command Line Tools
+  - Linux: build-essential and gcc/clang
 
-## Create and use a virtual environment
+## Installation
 
-You mentioned using a venv named `.mbd`. Below are platform specific commands.
+### 1. Set Up C++ Build Environment
 
-### Windows, PowerShell
+**Windows:**
+
+- Install Visual Studio Build Tools (includes C++ build tools)
+- Open Developer PowerShell for VS
+
+**macOS:**
+
+```bash
+xcode-select --install
+```
+
+**Linux:**
+
+```bash
+sudo apt install build-essential  # For Ubuntu/Debian
+```
+
+### 2. Create and Activate Virtual Environment
+
+**Windows:**
 
 ```powershell
 python -m venv .mbd
 .mbd\Scripts\Activate.ps1
 ```
 
-### macOS or Linux, bash or zsh
+**Unix/macOS:**
 
 ```bash
 python -m venv .mbd
 source .mbd/bin/activate
 ```
 
-Your shell prompt should now show the `.mbd` environment.
-
-## Install Python dependencies
-
-Install the required Python packages into the active environment.
+### 3. Install Python Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Build the C++ core
+### 4. Build the C++ Core
 
 The C++ extension accelerates the inner loop. The Python code will automatically fall back if the extension is not present.
 
@@ -71,17 +97,17 @@ This produces a platform specific module named `mbd_core.*` in the project folde
 
 Input folders are matched by basename, images against annotations.
 
-* Images folder, contains `.jpg`, `.jpeg`, `.png`, `.bmp`, `.tif` files
-* Annotations folder, contains either a `.npy` array with shape H×W and integer dtype, or a paletted `.png` mask
-* Basename pairing, `images_dir/foo.jpg` pairs with `anns_dir/foo.npy` or `anns_dir/foo.png`
+- Images folder, contains `.jpg`, `.jpeg`, `.png`, `.bmp`, `.tif` files
+- Annotations folder, contains either a `.npy` array with shape H×W and integer dtype, or a paletted `.png` mask
+- Basename pairing, `images_dir/foo.jpg` pairs with `anns_dir/foo.npy` or `anns_dir/foo.png`
 
 ### Annotation rules, very important
 
 DISCLAIMER: More information on the scribbles format will be provided in the future for easier reference.
 
-* Class 0 is unlabeled, these pixels are not used as seeds
-* Class 1 is background, these pixels are hard constrained to background
-* Classes greater than 1 are foreground, these pixels are hard constrained to their class
+- Class 0 is unlabeled, these pixels are not used as seeds
+- Class 1 is background, these pixels are hard constrained to background
+- Classes greater than 1 are foreground, these pixels are hard constrained to their class
 
 For convenience, here are the Pascal VOC classes used commonly with a VOC colormap.
 
@@ -137,12 +163,12 @@ If you want to see full segmentation masks, do not set `--unlabeled-to-void`. Le
 
 The script performs seed densification using Felzenszwalb superpixels and simple color checks. You can tune it or turn it off.
 
-* `--no-densify-fh` disables densification
-* `--fh-scale`, integer, default 100
-* `--fh-sigma`, float, default 0.8
-* `--fh-min-size`, integer, default 20
-* `--fh-min-region-frac`, float in 0 to 1, default 0.20
-* `--fh-grow-color-thresh`, float in LAB units, default 25.0
+- `--no-densify-fh` disables densification
+- `--fh-scale`, integer, default 100
+- `--fh-sigma`, float, default 0.8
+- `--fh-min-size`, integer, default 20
+- `--fh-min-region-frac`, float in 0 to 1, default 0.20
+- `--fh-grow-color-thresh`, float in LAB units, default 25.0
 
 Example with custom densification parameters:
 
@@ -163,43 +189,45 @@ python fh_mbd.py --images_dir ... --anns_dir ... --output_dir ... --no-densify-f
 
 ## Command line reference
 
-* `--images_dir`, required, folder containing input images
-* `--anns_dir`, required, folder containing per image annotations
-* `--output_dir`, required, folder where results are saved
-* `--num-images`, integer, default 0, zero means process all
-* `--start-one`, integer, default 1, one indexed start offset
-* `--workers`, integer, default 0, nonzero enables threaded I O in the outer loop, compute is single threaded
-* `--conn`, integer, 4 or 8, pixel connectivity for MBD
-* `--unlabeled-to-void`, flag, if set, saves unlabeled 0 as 255 in the PNG
-* `--no-shift-for-voc`, flag, if set, disables the save time index shift, keep this off to match VOC colors
-* Densification flags, see the previous section
+- `--images_dir`, required, folder containing input images
+- `--anns_dir`, required, folder containing per image annotations
+- `--output_dir`, required, folder where results are saved
+- `--num-images`, integer, default 0, zero means process all
+- `--start-one`, integer, default 1, one indexed start offset
+- `--workers`, integer, default 0, nonzero enables threaded I O in the outer loop, compute is single threaded
+- `--conn`, integer, 4 or 8, pixel connectivity for MBD
+- `--unlabeled-to-void`, flag, if set, saves unlabeled 0 as 255 in the PNG
+- `--no-shift-for-voc`, flag, if set, disables the save time index shift, keep this off to match VOC colors
+- Densification flags, see the previous section
 
 ## Output format and colors
 
-* One file per input image, path `output_dir/minimum_barrier_distance/<basename>_index.png`
-* PNG is paletted with the VOC colormap
-* Labels are shifted by one at save time, to align with the VOC palette indexing
-  * background class 1 becomes palette index 0
-  * classes greater than 1 become indices greater than or equal to 1
-  * unlabeled class 0 is left as 0 unless you set `--unlabeled-to-void`, in that case it becomes 255
+- One file per input image, path `output_dir/minimum_barrier_distance/<basename>_index.png`
+- PNG is paletted with the VOC colormap
+- Labels are shifted by one at save time, to align with the VOC palette indexing
+  - background class 1 becomes palette index 0
+  - classes greater than 1 become indices greater than or equal to 1
+  - unlabeled class 0 is left as 0 unless you set `--unlabeled-to-void`, in that case it becomes 255
 
 ## Troubleshooting
 
-* Build fails for the C++ core on Windows, install Visual Studio Build Tools, select C++ build tools, then reopen the developer PowerShell and try again
-* Build fails on macOS, run `xcode-select --install`, then rebuild
-* Build fails on Linux, install `build-essential` with your package manager, for example `sudo apt install build-essential`, then rebuild
-* Import error for `mbd_core`, the Python script will fall back to the pure Python solver, confirm that `python setup.py build_ext --inplace` succeeded and that `mbd_core.*` exists in the project folder
-* Palette colors look shifted, do not use `--no-shift-for-voc`, also confirm that you did not set `--unlabeled-to-void` if you want full masks
+- Build fails for the C++ core on Windows, install Visual Studio Build Tools, select C++ build tools, then reopen the developer PowerShell and try again
+- Build fails on macOS, run `xcode-select --install`, then rebuild
+- Build fails on Linux, install `build-essential` with your package manager, for example `sudo apt install build-essential`, then rebuild
+- Import error for `mbd_core`, the Python script will fall back to the pure Python solver, confirm that `python setup.py build_ext --inplace` succeeded and that `mbd_core.*` exists in the project folder
+- Palette colors look shifted, do not use `--no-shift-for-voc`, also confirm that you did not set `--unlabeled-to-void` if you want full masks
 
-## Notes on speed
+## Performance Notes
 
-The C++ core accelerates the Minimum Barrier Distance propagation. The Python wrapper handles I O, densification, and saving. On typical VOC sized images, the end to end time per image is short. The pipeline uses NumPy and scikit image for preprocessing and should run quickly on all platforms.
+The C++ core significantly accelerates the Minimum Barrier Distance propagation. The Python wrapper handles I/O, seed densification, and image saving. On typical VOC-sized images, the end-to-end processing time is minimal. The pipeline leverages:
 
-## Developer Notes
+- Optimized C++ core for MBD computation
+- Efficient NumPy operations for preprocessing
+- Multi-threaded I/O capabilities (optional)
 
-This repository includes an implementation of the Minimum Barrier Distance (MBD) seeded segmentation algorithm. The `mbd.py` file contains the core algorithm which computes segmentation masks using exact barrier distance propagation and applies VOC-compliant color shifting.
+## References
 
-**Reference:**
+The Minimum Barrier Distance algorithm is based on the work:
 
 ```bibtex
 @inbook{Strand_2014,
@@ -216,8 +244,16 @@ This repository includes an implementation of the Minimum Barrier Distance (MBD)
 }
 ```
 
-**Implemented by:** Mvzvrt
+## License
 
-**License:** MIT License (c) 2025 Mvzvrt
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-More details on the scribbles format and algorithm tuning will be provided in future updates.
+## Acknowledgements
+
+- The scikit-image library for image processing functionality
+- The pybind11 project for C++/Python bindings
+- The NumPy community for numerical computing support
+
+---
+
+Copyright © 2025 Mvzvrt. All rights reserved.
