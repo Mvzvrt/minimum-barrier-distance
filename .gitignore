@@ -1,2 +1,74 @@
-masks/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.mbd/
+
+# C++ Build
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.dylib
+*.lib
+*.pdb
+*.ilk
+*.exp
+mbd_core.*
+
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+.idea_modules/
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+.mbd/
+
+# Misc
+.DS_Store
+Thumbs.db
+*.log
+*.swp
+*~
+.directory
+
+# Project-specific
+masks/
+test_images/
+test_outputs/
+*.npy
+*.png
+!example_images/*.png
+!example_annotations/*.png

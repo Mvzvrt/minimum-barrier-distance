@@ -1,10 +1,93 @@
 #!/usr/bin/env python3
 """
-Programmer Description:
--------------------------
-This file, mbd.py, implements the Minimum Barrier Distance seeded segmentation algorithm.
-It is an industrial-grade, production-inspired implementation that computes segmentation masks based on exact barrier distance propagation.
-The label shifting is implemented to yield VOC-compliant outputs.
+Minimum Barrier Distance (MBD) Segmentation
+-----------------------------------------
+A high-performance implementation of seeded image segmentation using the Minimum
+Barrier Distance algorithm. This implementation provides both a pure Python version
+and an optimized C++ core for production use.
+
+Key Features:
+- Exact MBD computation with proven optimality guarantees
+- Multi-label segmentation support (background + multiple foreground classes)
+- VOC-compliant color palette and label mapping
+- Optional C++ acceleration via pybind11
+- Thread-pooled I/O for batch processing
+
+Algorithm Overview:
+------------------
+The Minimum Barrier Distance measures the difficulty of reaching a pixel from seed
+points by considering the range of intensity values along the path. For a path π,
+the barrier cost is:
+    Φ(π) = max(π) - min(π)
+
+The minimum barrier distance from a seed set S to a pixel c is:
+    Φ(c,S) = min_{π ∈ Π} Φ(π)
+where Π is the set of all paths from S to c.
+
+Implementation Details:
+---------------------
+- Exact distance computation using priority queue propagation
+- Lexicographic ordering: (b_plus↑, b_minus↓, label↑)
+- Hard constraints for seed points (labels > 0)
+- Optional 4 or 8 connectivity
+- Memory-efficient contiguous array operations
+
+Usage Examples:
+-------------
+1. Basic Single Image Segmentation:
+   
+   Example using the core functions to segment a single image:
+   
+   >>> # Load grayscale image (returns float32 array in [0,1])
+   >>> img = load_image_grayscale('input.jpg')
+   >>> H, W = img.shape
+   >>> 
+   >>> # Create seed mask (0=unlabeled, 1=background, 2+=objects)
+   >>> seeds = np.zeros((H,W), dtype=np.int32)
+   >>> seeds[10:20, 10:20] = 1    # Mark background region
+   >>> seeds[30:40, 30:40] = 2    # Mark object region
+   >>> 
+   >>> # Run MBD propagation with 4-connectivity
+   >>> labels, dists, _ = _run_mbd_py(img, seeds, conn=4)
+   >>> 
+   >>> # Save result with VOC colormap
+   >>> save_indexed_png(labels, 'output.png')
+
+2. Batch Processing with Multi-threading:
+   
+   Example processing multiple images in parallel:
+   
+   >>> # Set up processing arguments
+   >>> class Args: pass
+   >>> args = Args()
+   >>> args.conn = 4               # Use 4-connectivity
+   >>> args.workers = 4            # Use 4 worker threads
+   >>> args.unlabeled_to_void = False
+   >>> 
+   >>> # Find all image/annotation pairs
+   >>> pairs = find_image_annotation_pairs('images/', 'annotations/')
+   >>> 
+   >>> # Process images in parallel
+   >>> for img_path, ann_path in pairs:
+   ...     labels = run_single_image(img_path, ann_path, args)
+   ...     out_name = f"{Path(img_path).stem}_index.png"
+   ...     save_indexed_png(labels, f"results/{out_name}")
+
+3. Custom Visualization:
+   
+   Example using custom colormaps and label mapping:
+   
+   >>> # Generate custom colormap (normalized to [0,1])
+   >>> colors = voc_colormap(N=256, normalized=True)
+   >>> 
+   >>> # Save with custom settings
+   >>> save_indexed_png(
+   ...     labels,
+   ...     'custom_viz.png',
+   ...     palette=colors,           # Use custom colors
+   ...     shift_for_voc=True,      # Map background 1->0
+   ...     unlabeled_to_void=False  # Keep unlabeled visible
+   ... )
 
 Reference:
 @inbook{Strand_2014,
@@ -71,8 +154,33 @@ IMG_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
 # --------------------------- VOC colormap, consistent with batch_refine.py ---------------------------
 
 def voc_colormap(N: int = 256, normalized: bool = False) -> np.ndarray:
-    """Return the standard VOC colormap. Matches the bit trick used in batch_refine.py."""
+    """
+    Generate the PASCAL VOC dataset colormap for segmentation visualization.
+    
+    This function implements a bit-manipulation algorithm to generate a deterministic
+    colormap that matches the standard PASCAL VOC dataset visualization scheme.
+    The colors are generated such that:
+    - Neighboring indices get visually distinct colors
+    - The pattern repeats every 8 colors
+    - Each color channel (R,G,B) is determined by specific bits of the index
+    
+    Parameters:
+    ----------
+    N : int
+        Number of colors to generate. Default is 256 to cover all possible
+        8-bit label values.
+    normalized : bool
+        If True, returns floating point values in [0,1]
+        If False, returns integer values in [0,255]
+    
+    Returns:
+    -------
+    np.ndarray [N,3]
+        RGB colormap where each row is [r,g,b]
+        Data type is np.float32 if normalized=True, np.uint8 otherwise
+    """
     def bitget(byteval, idx):
+        """Extract the idx-th bit from byteval."""
         return (byteval & (1 << idx)) != 0
 
     dtype = np.float32 if normalized else np.uint8
@@ -97,17 +205,48 @@ def save_indexed_png(mask: np.ndarray,
                      shift_for_voc: bool = True,
                      unlabeled_to_void: bool = True) -> None:
     """
-    Save H x W int label mask as an indexed PNG. To match VOC colors, shift labels down by 1.
-    Your labels: 0 unlabeled, 1 background, 2..K objects.
-    After shift: background -> 0, objects -> 1..K-1, unlabeled stays 255 if unlabeled_to_void else stays 0 before shift.
-
-    Parameters
+    Save a label mask as an indexed PNG file with optional VOC dataset compatibility.
+    
+    This function saves segmentation results as 8-bit paletted PNGs, optionally
+    adjusting the label indices to match PASCAL VOC dataset conventions:
+    
+    Input Label Convention:
+        0: Unlabeled regions
+        1: Background
+        2+: Object segments
+        
+    VOC Label Convention (if shift_for_voc=True):
+        0: Background
+        1-254: Object segments
+        255: Void/Unlabeled (if unlabeled_to_void=True)
+        
+    Parameters:
     ----------
-    mask : np.ndarray of int
-    out_path : output file path
-    palette : np.ndarray palette shape 256 x 3 uint8
-    shift_for_voc : if True, apply the described shift before saving
-    unlabeled_to_void : if True, put unlabeled as 255, commonly used as ignore index
+    mask : np.ndarray
+        Integer label mask of shape [H,W] where each value
+        represents a different segment
+    out_path : str
+        Path where the PNG file will be saved
+    palette : np.ndarray, optional
+        RGB color palette of shape [256,3] with uint8 values
+        If None, uses the standard VOC colormap
+    shift_for_voc : bool
+        If True, shifts all labels down by 1 to match VOC convention:
+        - background (1 -> 0)
+        - objects (2+ -> 1+)
+        Default: True
+    unlabeled_to_void : bool
+        If True, maps unlabeled regions (0) to void label (255)
+        Only applies when shift_for_voc=True
+        Common in semantic segmentation tasks to ignore these regions
+        Default: True
+        
+    Notes:
+    -----
+    The function automatically:
+    1. Creates output directory if it doesn't exist
+    2. Converts input to uint8 for PNG compatibility
+    3. Applies the specified palette for visualization
     """
     m = np.asarray(mask, dtype=np.int32)
     if shift_for_voc:
@@ -132,7 +271,33 @@ def save_indexed_png(mask: np.ndarray,
 # --------------------------- I O helpers ---------------------------
 
 def load_image_grayscale(path: str) -> np.ndarray:
-    """Return float32 grayscale in [0, 1]."""
+    """
+    Load an image and convert it to normalized grayscale format.
+    
+    This function handles various input image formats and converts them
+    to a standardized grayscale representation suitable for MBD processing.
+    Supported input formats:
+    - L: 8-bit grayscale
+    - I;16: 16-bit grayscale
+    - I: 32-bit signed integer
+    - F: 32-bit floating point
+    - RGB/RGBA: Automatically converted to grayscale
+    
+    Parameters:
+    ----------
+    path : str
+        Path to the input image file
+        
+    Returns:
+    -------
+    np.ndarray
+        Grayscale image as float32 array normalized to [0,1] range
+        
+    Notes:
+    -----
+    For RGB/RGBA images, conversion uses the standard
+    luminosity formula: 0.299R + 0.587G + 0.114B
+    """
     img = Image.open(path)
     if img.mode not in ("L", "I;16", "I", "F"):
         img = img.convert("L")
@@ -148,7 +313,39 @@ def load_image_grayscale(path: str) -> np.ndarray:
 
 
 def load_annotation_map(ann_path: str) -> np.ndarray:
-    """Load .npy or paletted .png as H x W int32."""
+    """
+    Load a segmentation annotation map from file.
+    
+    Supports two file formats:
+    1. NumPy arrays (.npy):
+       - Direct load of integer label maps
+       - Preserved exactly as stored
+       
+    2. Indexed PNG files (.png):
+       - 8-bit paletted images (mode 'P')
+       - Index values map directly to segment labels
+       - Common format for dataset annotations
+    
+    Parameters:
+    ----------
+    ann_path : str
+        Path to the annotation file (.npy or .png)
+        
+    Returns:
+    -------
+    np.ndarray [H,W]
+        Label map as int32 array where each unique value
+        represents a different segment
+        - 0 typically represents background
+        - 1+ are foreground object segments
+    
+    Raises:
+    ------
+    ValueError
+        If file format is not .npy or .png
+    RuntimeError
+        If PNG is not in paletted ('P') mode
+    """
     p = Path(ann_path)
     if p.suffix.lower() == ".npy":
         ann = np.load(ann_path)
@@ -161,7 +358,40 @@ def load_annotation_map(ann_path: str) -> np.ndarray:
 
 
 def find_image_annotation_pairs(images_dir: str, anns_dir: str) -> List[Tuple[str, Optional[str]]]:
-    """Pair images with annotations by basename. Prefer .npy over .png, skip if missing."""
+    """
+    Find matching image and annotation files in separate directories.
+    
+    This function pairs images with their corresponding annotation files
+    by matching base filenames across directories. For example:
+    - images_dir/img1.jpg -> anns_dir/img1.npy or img1.png
+    
+    Priority for annotation formats:
+    1. .npy files (preferred for exact label preservation)
+    2. .png files (common in datasets but may have palette issues)
+    
+    Parameters:
+    ----------
+    images_dir : str
+        Directory containing input images
+        Supported extensions: .jpg, .jpeg, .png
+    anns_dir : str
+        Directory containing annotation files
+        Supported extensions: .npy, .png
+        
+    Returns:
+    -------
+    List[Tuple[str, Optional[str]]]
+        List of (image_path, annotation_path) pairs where:
+        - image_path: Path to an input image
+        - annotation_path: Path to corresponding annotation file,
+                         or None if no match found
+                         
+    Notes:
+    -----
+    - Files are matched by their base name (without extension)
+    - Images without matching annotations are included with None
+    - Non-image and non-annotation files are ignored
+    """
     images_dir = Path(images_dir)
     anns_dir = Path(anns_dir)
     imgs = [p for p in images_dir.iterdir() if p.is_file() and p.suffix.lower() in IMG_EXTS]
@@ -178,97 +408,229 @@ def find_image_annotation_pairs(images_dir: str, anns_dir: str) -> List[Tuple[st
 # --------------------------- Pure Python MBD core ---------------------------
 
 def _neighbors_offsets(conn: int = 4):
+    """
+    Generate pixel neighborhood offsets for connectivity patterns.
+    
+    The function returns a list of (dy, dx) offset tuples that define
+    the pixel neighborhood structure for propagation. Two connectivity 
+    patterns are supported:
+    
+    4-connectivity:
+        p4 = [
+            (-1, 0),   # Up
+            (1, 0),    # Down
+            (0, -1),   # Left
+            (0, 1)     # Right
+        ]
+        
+    8-connectivity (adds diagonals):
+        p8 = [
+            (-1, 0),   # Up
+            (1, 0),    # Down
+            (0, -1),   # Left
+            (0, 1),    # Right
+            (-1, -1),  # Up-Left
+            (-1, 1),   # Up-Right
+            (1, -1),   # Down-Left
+            (1, 1)     # Down-Right
+        ]
+    
+    Parameters:
+    ----------
+    conn : int
+        Connectivity pattern to use:
+        - 4 for von Neumann neighborhood (default)
+        - 8 for Moore neighborhood
+    
+    Returns:
+    -------
+    list[tuple]
+        List of (dy, dx) offset pairs defining the neighborhood
+        structure for the requested connectivity pattern
+    
+    Raises:
+    ------
+    ValueError
+        If conn is not 4 or 8
+    """
     if conn == 4:
         return [(-1, 0), (1, 0), (0, -1), (0, 1)]
     if conn == 8:
         return [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
+    raise ValueError(f"Connectivity must be 4 or 8, got {conn}")
     raise ValueError("conn must be 4 or 8")
 
 
 def _run_mbd_py(weights: np.ndarray, seeds: np.ndarray, conn: int = 4):
     """
-    Exact MBD with Algorithm 3 like propagation in Python.
-    Seeds greater than 0 are hard constraints, 0 is unlabeled and not locked.
+    Pure Python implementation of exact MBD propagation with label assignment.
+    
+    Algorithm Details:
+    ----------------
+    1. Initialize distance maps:
+       - bmin[p] = min value along best path to p
+       - bmax[p] = max value along best path to p
+       - dist[p] = barrier width (bmax[p] - bmin[p])
+    
+    2. Priority Queue Ordering:
+       - Primary: smallest bmax (minimize maximum along path)
+       - Secondary: largest bmin (maximize minimum along path)
+       - Tertiary: smallest label (deterministic tie-breaking)
+    
+    3. Propagation Rule:
+       For each pixel p and neighbor q:
+       - Update q if new path through p gives:
+         a) Smaller barrier width, or
+         b) Equal width but smaller bmax, or
+         c) Equal width and bmax but larger bmin, or
+         d) Equal width, bmax, bmin but smaller label
+    
+    Parameters:
+    ----------
+    weights : np.ndarray [H,W] float32
+        Input image intensities, normalized to [0,1]
+    seeds : np.ndarray [H,W] int32
+        Seed mask where 0=unlabeled, 1=background, >1=objects
+    conn : int
+        Pixel connectivity, either 4 or 8 (default: 4)
+    
+    Returns:
+    -------
+    labels : np.ndarray [H,W] int32
+        Segmentation with propagated labels
+    distances : np.ndarray [H,W] float32
+        Minimum barrier distance at each pixel
+    pops : int
+        Number of priority queue operations
     """
     import heapq
 
+    # Get image dimensions and flatten arrays for 1D indexing
     H, W = weights.shape
-    N = H * W
-    w = weights.ravel()
-    s = np.asarray(seeds, dtype=np.int32)
+    N = H * W  # Total number of pixels
+    w = weights.ravel()  # Flatten image to 1D array for direct indexing
+    s = np.asarray(seeds, dtype=np.int32)  # Ensure seeds are int32
     if s.shape != (H, W):
         raise ValueError("seeds must match image size")
 
-    bmin = np.full(N, np.inf, dtype=np.float32)
-    bmax = np.full(N, -np.inf, dtype=np.float32)
-    dist = np.full(N, np.inf, dtype=np.float32)
-    label = np.zeros(N, dtype=np.int32)
-    locked = (s.ravel() > 0)
+    # Initialize barrier distance arrays with infinities
+    bmin = np.full(N, np.inf, dtype=np.float32)   # Minimum value along best path
+    bmax = np.full(N, -np.inf, dtype=np.float32)  # Maximum value along best path
+    dist = np.full(N, np.inf, dtype=np.float32)   # Barrier width (bmax - bmin)
+    label = np.zeros(N, dtype=np.int32)           # Propagated label assignments
+    locked = (s.ravel() > 0)                      # Track seed points (hard constraints)
 
+    # Initialize priority queue for propagation
     heap = []
-    push = heapq.heappush
+    push = heapq.heappush  # Shorthand for priority queue operations
     pop = heapq.heappop
-    counter = 0
+    counter = 0  # Counter for deterministic FIFO behavior within same priority
 
-    ys, xs = np.nonzero(s > 0)
+    # Find and sort seed points for deterministic initialization
+    ys, xs = np.nonzero(s > 0)  # Get coordinates of all seed points
+    # Sort seeds by label and position for deterministic behavior:
+    # - Primary sort by label (s[y,x])
+    # - Secondary sort by linear index (y*W + x)
     order = np.argsort(s[ys, xs] * (H * W) + (ys * W + xs))
-    ys, xs = ys[order], xs[order]
+    ys, xs = ys[order], xs[order]  # Apply sorting
 
+    # Initialize seed points in priority queue
     for y, x in zip(ys, xs):
-        idx = y * W + x
-        lab = int(s[y, x])
-        val = w[idx]
-        bmin[idx] = val
-        bmax[idx] = val
-        dist[idx] = 0.0
-        label[idx] = lab
+        idx = y * W + x  # Convert 2D coordinates to 1D index
+        lab = int(s[y, x])  # Get seed label
+        val = w[idx]  # Get pixel intensity
+
+        # Initialize distance maps for seed point:
+        bmin[idx] = val  # Minimum value is current value
+        bmax[idx] = val  # Maximum value is current value
+        dist[idx] = 0.0  # Barrier distance is 0 at seeds
+        label[idx] = lab  # Assign seed label
+
+        # Add to priority queue with:
+        # - Primary key: bmax (ascending)
+        # - Secondary key: -bmin (ascending, so bmin descending)
+        # - Tertiary key: counter (FIFO ordering)
+        # - Data: pixel index and label
         push(heap, (bmax[idx], -bmin[idx], counter, idx, lab))
         counter += 1
 
-    offs = _neighbors_offsets(conn)
+    # Get neighborhood offsets based on connectivity pattern
+    offs = _neighbors_offsets(conn)  # 4 or 8-connected neighborhood
 
     def itn(i):
-        y, x = divmod(i, W)
-        for dy, dx in offs:
-            ny, nx = y + dy, x + dx
-            if 0 <= ny < H and 0 <= nx < W:
-                yield ny * W + nx
+        """Generate valid neighbor indices for a given pixel index.
+        
+        Args:
+            i: Linear index of current pixel
+            
+        Yields:
+            Linear indices of valid neighbors based on connectivity pattern
+        """
+        y, x = divmod(i, W)  # Convert linear index to 2D coordinates
+        for dy, dx in offs:  # Check each neighbor offset
+            ny, nx = y + dy, x + dx  # Get neighbor coordinates
+            if 0 <= ny < H and 0 <= nx < W:  # Check image bounds
+                yield ny * W + nx  # Yield linear index if valid
 
-    pops = 0
+    # Main propagation loop
+    pops = 0  # Count priority queue operations
     while heap:
+        # Get next node with minimum barrier width
+        # bp: barrier max (bmax), nbm: negative barrier min (-bmin)
+        # idx: pixel index, lab: propagating label
         bp, nbm, _, idx, lab = pop(heap)
         pops += 1
-        bm = -nbm
+        bm = -nbm  # Convert back to actual barrier min
+        
+        # Skip stale queue entries (values have been improved)
         if bp != bmax[idx] or bm != bmin[idx] or lab != label[idx]:
-            continue
+            continue  # Current node has been updated since enqueue
 
+        # Process each valid neighbor
         for j in itn(idx):
+            # Skip if neighbor is a locked seed with different label
             if locked[j] and label[j] != lab:
-                continue
-            cand_bmin = bmin[idx] if bmin[idx] < w[j] else w[j]
-            cand_bmax = bmax[idx] if bmax[idx] > w[j] else w[j]
-            cand_bw = cand_bmax - cand_bmin
+                continue  # Preserve hard constraints
 
+            # Compute candidate barrier values through current pixel
+            # The barrier must include both the current path and neighbor's value
+            cand_bmin = min(bmin[idx], w[j])  # Update path minimum
+            cand_bmax = max(bmax[idx], w[j])  # Update path maximum
+            cand_bw = cand_bmax - cand_bmin   # New barrier width
+
+            # Check if new path is better using lexicographic ordering:
+            # 1. Minimum barrier width (primary criterion)
+            # 2. Minimum bmax value (if barrier widths equal)
+            # 3. Maximum bmin value (if barrier widths and bmax equal)
+            # 4. Minimum label (if all above are equal)
             upd = False
-            if cand_bw < dist[j]:
+            if cand_bw < dist[j]:  # Better barrier width
                 upd = True
-            elif cand_bw == dist[j]:
-                if cand_bmax < bmax[j]:
+            elif cand_bw == dist[j]:  # Equal barrier width
+                if cand_bmax < bmax[j]:  # Better maximum
                     upd = True
-                elif cand_bmax == bmax[j] and cand_bmin > bmin[j]:
+                elif cand_bmax == bmax[j] and cand_bmin > bmin[j]:  # Equal max, better min
                     upd = True
-                elif cand_bmax == bmax[j] and cand_bmin == bmin[j] and lab < label[j]:
+                elif (cand_bmax == bmax[j] and cand_bmin == bmin[j] and  # All equal
+                      lab < label[j]):  # Use smallest label for deterministic behavior
                     upd = True
 
+            # If better path found, update neighbor's state
             if upd:
-                bmin[j] = cand_bmin
-                bmax[j] = cand_bmax
-                dist[j] = cand_bw
-                label[j] = lab
+                # Update barrier distance maps
+                bmin[j] = cand_bmin  # New minimum along path
+                bmax[j] = cand_bmax  # New maximum along path
+                dist[j] = cand_bw    # New barrier width
+                label[j] = lab       # Inherit label from best path
+                
+                # Re-add to queue with updated priority
                 push(heap, (bmax[j], -bmin[j], counter, j, lab))
-                counter += 1
+                counter += 1  # Maintain FIFO order for equal priorities
 
-    return label.reshape(H, W), dist.reshape(H, W), pops
+    # Return results reshaped to original image dimensions
+    return (label.reshape(H, W),    # Segmentation labels
+            dist.reshape(H, W),     # Minimum barrier distances
+            pops)                   # Number of queue operations
 
 
 # --------------------------- Runner ---------------------------

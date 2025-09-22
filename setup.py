@@ -1,37 +1,81 @@
+"""
+Setup script for building the Minimum Barrier Distance C++ extension
+"""
 from setuptools import setup, Extension
 import sys
 import sysconfig
 import os
+import platform
 
-# pybind11 is a build dependency
-try:
-    import pybind11
-except Exception as e:
-    raise RuntimeError("pybind11 must be installed before building. Try: pip install pybind11") from e
+# Check Python version
+if sys.version_info < (3, 9):
+    sys.exit('Python >= 3.9 is required')
 
-# numpy headers are also required for pybind11's numpy bindings
-try:
-    import numpy as np
-except Exception as e:
-    raise RuntimeError("numpy must be installed before building. Try: pip install numpy") from e
+# Check for build dependencies
+def check_dependency(package, name=None):
+    name = name or package
+    try:
+        return __import__(package)
+    except ImportError as e:
+        raise RuntimeError(
+            f"{name} is required for building. "
+            f"Please install it first: pip install {package}"
+        ) from e
 
-cxx_flags = ["-O3"]
+pybind11 = check_dependency("pybind11")
+np = check_dependency("numpy")
+
+# Configure platform-specific compilation flags
 if sys.platform == "win32":
-    cxx_flags = ["/O2"]
+    cxx_flags = ["/O2", "/std:c++14", "/EHsc"]
+else:
+    cxx_flags = ["-O3", "-std=c++14", "-fvisibility=hidden"]
+    # Add platform-specific optimizations
+    if platform.machine() in ("x86_64", "AMD64"):
+        cxx_flags.extend(["-march=native"])
 
 ext_modules = [
     Extension(
         name="mbd_core",
         sources=["mbd_core.cpp"],
-        include_dirs=[pybind11.get_include(), np.get_include()],
+        include_dirs=[
+            pybind11.get_include(),
+            np.get_include(),
+        ],
         language="c++",
         extra_compile_args=cxx_flags,
     )
 ]
 
+# Read README for long description
+try:
+    with open("README.md", "r", encoding="utf-8") as f:
+        long_description = f.read()
+except FileNotFoundError:
+    long_description = ""
+
 setup(
     name="mbd_core",
     version="0.1.0",
-    description="C++ core for Minimum Barrier Distance",
+    author="Mvzvrt",
+    description="C++ core for Minimum Barrier Distance segmentation",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
     ext_modules=ext_modules,
+    python_requires=">=3.9",
+    install_requires=[
+        "numpy>=1.19.0",
+        "pybind11>=2.6.0",
+    ],
+    classifiers=[
+        "Development Status :: 4 - Beta",
+        "Intended Audience :: Science/Research",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: C++",
+        "Topic :: Scientific/Engineering :: Image Processing",
+    ],
 )
