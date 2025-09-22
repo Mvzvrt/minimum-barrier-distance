@@ -6,7 +6,7 @@
 [![scikit-image](https://img.shields.io/badge/scikit--image-%23F7931E.svg?logo=scikit-learn&logoColor=white)](https://scikit-image.org)
 [![Pillow](https://img.shields.io/badge/Pillow-%23EE4C2C.svg?logo=python&logoColor=white)](https://python-pillow.org)
 
-A high-performance implementation of the Minimum Barrier Distance (MBD) algorithm for seeded image segmentation. This project provides both a pure Python implementation and an optimized C++ version using pybind11 for efficient multi-label segmentation, along with an experimental seed densification feature. The pipeline accepts per-image annotations, produces VOC-compliant indexed PNG masks, and follows a simple, reproducible command line interface.
+A high-performance implementation of the Minimum Barrier Distance (MBD) algorithm for seeded image segmentation. This project provides both a pure Python implementation and an optimized C++ version using pybind11 for efficient multi-label segmentation. The pipeline accepts per-image annotations, produces VOC-compliant indexed PNG masks, and follows a simple, reproducible command line interface.
 
 ## Features
 
