@@ -138,14 +138,7 @@ from typing import List, Optional, Tuple
 import numpy as np
 from PIL import Image
 from tqdm import tqdm
-
-# Try the C++ extension, fall back to Python if unavailable
-_USE_CPP = False
-try:
-    import mbd_core  # built from mbd_core.cpp
-    _USE_CPP = True
-except Exception:
-    _USE_CPP = False
+import mbd_core  # mandatory C++ extension
 
 METHOD_NAME = "mbd"
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
@@ -405,234 +398,6 @@ def find_image_annotation_pairs(images_dir: str, anns_dir: str) -> List[Tuple[st
     return pairs
 
 
-# --------------------------- Pure Python MBD core ---------------------------
-
-def _neighbors_offsets(conn: int = 4):
-    """
-    Generate pixel neighborhood offsets for connectivity patterns.
-    
-    The function returns a list of (dy, dx) offset tuples that define
-    the pixel neighborhood structure for propagation. Two connectivity 
-    patterns are supported:
-    
-    4-connectivity:
-        p4 = [
-            (-1, 0),   # Up
-            (1, 0),    # Down
-            (0, -1),   # Left
-            (0, 1)     # Right
-        ]
-        
-    8-connectivity (adds diagonals):
-        p8 = [
-            (-1, 0),   # Up
-            (1, 0),    # Down
-            (0, -1),   # Left
-            (0, 1),    # Right
-            (-1, -1),  # Up-Left
-            (-1, 1),   # Up-Right
-            (1, -1),   # Down-Left
-            (1, 1)     # Down-Right
-        ]
-    
-    Parameters:
-    ----------
-    conn : int
-        Connectivity pattern to use:
-        - 4 for von Neumann neighborhood (default)
-        - 8 for Moore neighborhood
-    
-    Returns:
-    -------
-    list[tuple]
-        List of (dy, dx) offset pairs defining the neighborhood
-        structure for the requested connectivity pattern
-    
-    Raises:
-    ------
-    ValueError
-        If conn is not 4 or 8
-    """
-    if conn == 4:
-        return [(-1, 0), (1, 0), (0, -1), (0, 1)]
-    if conn == 8:
-        return [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]
-    raise ValueError(f"Connectivity must be 4 or 8, got {conn}")
-    raise ValueError("conn must be 4 or 8")
-
-
-def _run_mbd_py(weights: np.ndarray, seeds: np.ndarray, conn: int = 4):
-    """
-    Pure Python implementation of exact MBD propagation with label assignment.
-    
-    Algorithm Details:
-    ----------------
-    1. Initialize distance maps:
-       - bmin[p] = min value along best path to p
-       - bmax[p] = max value along best path to p
-       - dist[p] = barrier width (bmax[p] - bmin[p])
-    
-    2. Priority Queue Ordering:
-       - Primary: smallest bmax (minimize maximum along path)
-       - Secondary: largest bmin (maximize minimum along path)
-       - Tertiary: smallest label (deterministic tie-breaking)
-    
-    3. Propagation Rule:
-       For each pixel p and neighbor q:
-       - Update q if new path through p gives:
-         a) Smaller barrier width, or
-         b) Equal width but smaller bmax, or
-         c) Equal width and bmax but larger bmin, or
-         d) Equal width, bmax, bmin but smaller label
-    
-    Parameters:
-    ----------
-    weights : np.ndarray [H,W] float32
-        Input image intensities, normalized to [0,1]
-    seeds : np.ndarray [H,W] int32
-        Seed mask where 0=unlabeled, 1=background, >1=objects
-    conn : int
-        Pixel connectivity, either 4 or 8 (default: 4)
-    
-    Returns:
-    -------
-    labels : np.ndarray [H,W] int32
-        Segmentation with propagated labels
-    distances : np.ndarray [H,W] float32
-        Minimum barrier distance at each pixel
-    pops : int
-        Number of priority queue operations
-    """
-    import heapq
-
-    # Get image dimensions and flatten arrays for 1D indexing
-    H, W = weights.shape
-    N = H * W  # Total number of pixels
-    w = weights.ravel()  # Flatten image to 1D array for direct indexing
-    s = np.asarray(seeds, dtype=np.int32)  # Ensure seeds are int32
-    if s.shape != (H, W):
-        raise ValueError("seeds must match image size")
-
-    # Initialize barrier distance arrays with infinities
-    bmin = np.full(N, np.inf, dtype=np.float32)   # Minimum value along best path
-    bmax = np.full(N, -np.inf, dtype=np.float32)  # Maximum value along best path
-    dist = np.full(N, np.inf, dtype=np.float32)   # Barrier width (bmax - bmin)
-    label = np.zeros(N, dtype=np.int32)           # Propagated label assignments
-    locked = (s.ravel() > 0)                      # Track seed points (hard constraints)
-
-    # Initialize priority queue for propagation
-    heap = []
-    push = heapq.heappush  # Shorthand for priority queue operations
-    pop = heapq.heappop
-    counter = 0  # Counter for deterministic FIFO behavior within same priority
-
-    # Find and sort seed points for deterministic initialization
-    ys, xs = np.nonzero(s > 0)  # Get coordinates of all seed points
-    # Sort seeds by label and position for deterministic behavior:
-    # - Primary sort by label (s[y,x])
-    # - Secondary sort by linear index (y*W + x)
-    order = np.argsort(s[ys, xs] * (H * W) + (ys * W + xs))
-    ys, xs = ys[order], xs[order]  # Apply sorting
-
-    # Initialize seed points in priority queue
-    for y, x in zip(ys, xs):
-        idx = y * W + x  # Convert 2D coordinates to 1D index
-        lab = int(s[y, x])  # Get seed label
-        val = w[idx]  # Get pixel intensity
-
-        # Initialize distance maps for seed point:
-        bmin[idx] = val  # Minimum value is current value
-        bmax[idx] = val  # Maximum value is current value
-        dist[idx] = 0.0  # Barrier distance is 0 at seeds
-        label[idx] = lab  # Assign seed label
-
-        # Add to priority queue with:
-        # - Primary key: bmax (ascending)
-        # - Secondary key: -bmin (ascending, so bmin descending)
-        # - Tertiary key: counter (FIFO ordering)
-        # - Data: pixel index and label
-        push(heap, (bmax[idx], -bmin[idx], counter, idx, lab))
-        counter += 1
-
-    # Get neighborhood offsets based on connectivity pattern
-    offs = _neighbors_offsets(conn)  # 4 or 8-connected neighborhood
-
-    def itn(i):
-        """Generate valid neighbor indices for a given pixel index.
-        
-        Args:
-            i: Linear index of current pixel
-            
-        Yields:
-            Linear indices of valid neighbors based on connectivity pattern
-        """
-        y, x = divmod(i, W)  # Convert linear index to 2D coordinates
-        for dy, dx in offs:  # Check each neighbor offset
-            ny, nx = y + dy, x + dx  # Get neighbor coordinates
-            if 0 <= ny < H and 0 <= nx < W:  # Check image bounds
-                yield ny * W + nx  # Yield linear index if valid
-
-    # Main propagation loop
-    pops = 0  # Count priority queue operations
-    while heap:
-        # Get next node with minimum barrier width
-        # bp: barrier max (bmax), nbm: negative barrier min (-bmin)
-        # idx: pixel index, lab: propagating label
-        bp, nbm, _, idx, lab = pop(heap)
-        pops += 1
-        bm = -nbm  # Convert back to actual barrier min
-        
-        # Skip stale queue entries (values have been improved)
-        if bp != bmax[idx] or bm != bmin[idx] or lab != label[idx]:
-            continue  # Current node has been updated since enqueue
-
-        # Process each valid neighbor
-        for j in itn(idx):
-            # Skip if neighbor is a locked seed with different label
-            if locked[j] and label[j] != lab:
-                continue  # Preserve hard constraints
-
-            # Compute candidate barrier values through current pixel
-            # The barrier must include both the current path and neighbor's value
-            cand_bmin = min(bmin[idx], w[j])  # Update path minimum
-            cand_bmax = max(bmax[idx], w[j])  # Update path maximum
-            cand_bw = cand_bmax - cand_bmin   # New barrier width
-
-            # Check if new path is better using lexicographic ordering:
-            # 1. Minimum barrier width (primary criterion)
-            # 2. Minimum bmax value (if barrier widths equal)
-            # 3. Maximum bmin value (if barrier widths and bmax equal)
-            # 4. Minimum label (if all above are equal)
-            upd = False
-            if cand_bw < dist[j]:  # Better barrier width
-                upd = True
-            elif cand_bw == dist[j]:  # Equal barrier width
-                if cand_bmax < bmax[j]:  # Better maximum
-                    upd = True
-                elif cand_bmax == bmax[j] and cand_bmin > bmin[j]:  # Equal max, better min
-                    upd = True
-                elif (cand_bmax == bmax[j] and cand_bmin == bmin[j] and  # All equal
-                      lab < label[j]):  # Use smallest label for deterministic behavior
-                    upd = True
-
-            # If better path found, update neighbor's state
-            if upd:
-                # Update barrier distance maps
-                bmin[j] = cand_bmin  # New minimum along path
-                bmax[j] = cand_bmax  # New maximum along path
-                dist[j] = cand_bw    # New barrier width
-                label[j] = lab       # Inherit label from best path
-                
-                # Re-add to queue with updated priority
-                push(heap, (bmax[j], -bmin[j], counter, j, lab))
-                counter += 1  # Maintain FIFO order for equal priorities
-
-    # Return results reshaped to original image dimensions
-    return (label.reshape(H, W),    # Segmentation labels
-            dist.reshape(H, W),     # Minimum barrier distances
-            pops)                   # Number of queue operations
-
-
 # --------------------------- Runner ---------------------------
 
 def run_single_image(image_path: str, ann_path: str, args) -> np.ndarray:
@@ -644,16 +409,13 @@ def run_single_image(image_path: str, ann_path: str, args) -> np.ndarray:
         raise ValueError(f"Shape mismatch for {image_path} and {ann_path}, got {w.shape} vs {seeds.shape}")
 
     t0 = time.time()
-    if _USE_CPP:
-        labels, dist_map, pops = mbd_core.run_mbd_label_propagation(w.astype(np.float32, copy=False),
-                                                                    seeds.astype(np.int32, copy=False),
-                                                                    int(args.conn))
-    else:
-        labels, dist_map, pops = _run_mbd_py(w, seeds, conn=args.conn)
+    labels, dist_map, pops = mbd_core.run_mbd_label_propagation(w.astype(np.float32, copy=False),
+                                                                seeds.astype(np.int32, copy=False),
+                                                                int(args.conn))
     ms = (time.time() - t0) * 1000.0
 
     H, W = w.shape
-    logging.info(f"{Path(image_path).stem}, {H}x{W}, pops {int(pops)}, runtime_ms {ms:.2f}, cpp {bool(_USE_CPP)}")
+    logging.info(f"{Path(image_path).stem}, {H}x{W}, pops {int(pops)}, runtime_ms {ms:.2f}, cpp True")
     return labels
 
 
@@ -748,7 +510,7 @@ def main():
         "skipped": skipped,
         "avg_runtime_ms": float(np.mean(times)) if times else None,
         "median_runtime_ms": float(np.median(times)) if times else None,
-        "used_cpp": bool(_USE_CPP),
+        "used_cpp": True,
         "conn": int(args.conn),
         "method": METHOD_NAME
     }))
@@ -769,14 +531,11 @@ def _synthetic_case(H: int = 64, W: int = 64):
 def _run_tests():
     logging.info("Running synthetic test")
     img, seeds = _synthetic_case()
-    if _USE_CPP:
-        labels, dist_map, pops = mbd_core.run_mbd_label_propagation(img.astype(np.float32), seeds.astype(np.int32), 4)
-    else:
-        labels, dist_map, pops = _run_mbd_py(img, seeds, 4)
+    labels, dist_map, pops = mbd_core.run_mbd_label_propagation(img.astype(np.float32), seeds.astype(np.int32), 4)
     assert labels[9, 9] == 1, "background seed must stay 1"
     assert labels[-9, -9] == 2, "foreground seed must stay 2"
     logging.info(f"OK, pops {int(pops)}")
-    print(json.dumps({"test": "ok", "pops": int(pops), "cpp": bool(_USE_CPP)}))
+    print(json.dumps({"test": "ok", "pops": int(pops), "cpp": True}))
 
 
 if __name__ == "__main__":

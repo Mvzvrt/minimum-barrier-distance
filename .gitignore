@@ -72,3 +72,5 @@ test_outputs/
 *.png
 !example_images/*.png
 !example_annotations/*.png
+
+mbd.zip
