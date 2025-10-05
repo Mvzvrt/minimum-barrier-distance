@@ -1,7 +1,7 @@
 """
 Setup script for building the Minimum Barrier Distance C++ extension
 """
-from setuptools import setup, Extension
+from setuptools import setup, Extension, find_packages
 import sys
 import sysconfig
 import os
@@ -55,13 +55,13 @@ except FileNotFoundError:
     long_description = ""
 
 setup(
-    name="mbd",  # Package name changed to mbd
+    name="mc-mbd",  # Package name changed to mc-mbd
     version="0.1.0",
     author="Mvzvrt",
-    description="Minimum Barrier Distance segmentation algorithm",
+    description="Multiclass Minimum Barrier Distance segmentation algorithm",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    py_modules=["mbd"],  # Include the mbd.py module
+    packages=find_packages(),  # Automatically include all packages in mbd/
     ext_modules=ext_modules,
     python_requires=">=3.9",
     install_requires=[

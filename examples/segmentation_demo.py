@@ -1,35 +1,16 @@
 #!/usr/bin/env python3
 """
-Test script for the Minimum Barrier Distance (MBD) segmentation package.
-Takes an input image and performs segmentation with automatically generated seeds.
+Example script demonstrating the usage of MBD segmentation.
 """
 
+import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
-import argparse
-import mbd
-
-def load_and_preprocess_image(image_path):
-    """Load and preprocess an image for segmentation."""
-    # Load image and convert to grayscale
-    img = Image.open(image_path)
-    if img.mode != 'L':
-        img = img.convert('L')
-    
-    # Convert to numpy array and normalize to [0,1]
-    image = np.array(img, dtype=np.float32)
-    image = (image - image.min()) / (image.max() - image.min())
-    return image
+from mbd import segment_image
 
 def create_seeds(image_shape, margin=15, object_size=20):
-    """Create seeds for background and multiple objects.
-    
-    Args:
-        image_shape: Tuple of (height, width)
-        margin: Distance from border for background seeds
-        object_size: Size of the object seed regions
-    """
+    """Create seeds for background and multiple objects."""
     height, width = image_shape
     seeds = np.zeros(image_shape, dtype=np.int32)
     
@@ -52,6 +33,16 @@ def create_seeds(image_shape, margin=15, object_size=20):
           quad_x-half_size:quad_x+half_size] = 3
     
     return seeds
+
+def load_and_preprocess_image(image_path):
+    """Load and preprocess an image for segmentation."""
+    img = Image.open(image_path)
+    if img.mode != 'L':
+        img = img.convert('L')
+    
+    image = np.array(img, dtype=np.float32)
+    image = (image - image.min()) / (image.max() - image.min())
+    return image
 
 def visualize_results(image, seeds, segmentation):
     """Visualize the input image, seeds, and segmentation result."""
@@ -78,7 +69,6 @@ def visualize_results(image, seeds, segmentation):
     plt.show()
 
 def main():
-    # Parse command line arguments
     parser = argparse.ArgumentParser(description='Test MBD segmentation on an image')
     parser.add_argument('image_path', help='Path to the input image')
     parser.add_argument('--margin', type=int, default=15, 
@@ -97,7 +87,7 @@ def main():
     
     # Run segmentation
     print("Running MBD segmentation...")
-    labels = mbd.segment_image(image, seeds)
+    labels = segment_image(image, seeds)
     
     # Verify the results maintain seed labels
     seed_positions = seeds > 0
