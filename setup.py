@@ -55,17 +55,19 @@ except FileNotFoundError:
     long_description = ""
 
 setup(
-    name="mbd_core",
+    name="mbd",  # Package name changed to mbd
     version="0.1.0",
     author="Mvzvrt",
-    description="C++ core for Minimum Barrier Distance segmentation",
+    description="Minimum Barrier Distance segmentation algorithm",
     long_description=long_description,
     long_description_content_type="text/markdown",
+    py_modules=["mbd"],  # Include the mbd.py module
     ext_modules=ext_modules,
     python_requires=">=3.9",
     install_requires=[
         "numpy>=1.19.0",
         "pybind11>=2.6.0",
+        "pillow>=8.0.0",  # Added PIL dependency
     ],
     classifiers=[
         "Development Status :: 4 - Beta",
