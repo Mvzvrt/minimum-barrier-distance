@@ -54,10 +54,6 @@ mc-mbd achieves a mean intersection-over-union (mIoU) of 55.5% on the PASCAL VOC
 **Speed:**
 On standard 480×480 pixel images, mc-mbd segments each image in about 0.16 seconds on average, enabling fast and efficient large-scale image processing.
 
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
 ## Quick Usage Example
 
 ```python
