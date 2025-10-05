@@ -16,7 +16,7 @@
 Install from PyPI (package name uses an underscore so it's importable):
 
 ```bash
-pip install mc_mbd
+pip install mc-mbd
 ```
 
 After installing via pip you can import the library in Python (package name stays `mbd`):

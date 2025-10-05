@@ -56,7 +56,7 @@ except FileNotFoundError:
 
 setup(
     name="mc_mbd",
-    version="0.1.3",
+    version="0.1.4",
     author="Mvzvrt",
     description="Multiclass Minimum Barrier Distance segmentation algorithm",
     long_description=long_description,
