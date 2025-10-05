@@ -12,7 +12,6 @@ A high-performance implementation of the Minimum Barrier Distance (MBD) algorith
 
 - Exact Minimum Barrier Distance objective, multi label seeded propagation
 - Annotation convention, class 0 is unlabeled, class 1 is background, classes greater than 1 are foreground categories
-- Seed densification using Felzenszwalb regions, configurable by flags
 - VOC colormap saving, background is shown with palette index 0
 - Fast path via a C++ extension, Python fallback is available
 
