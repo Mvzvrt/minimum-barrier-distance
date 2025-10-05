@@ -56,7 +56,7 @@ except FileNotFoundError:
 
 setup(
     name="mc_mbd",
-    version="0.1.1",
+    version="0.1.0",
     author="Mvzvrt",
     description="Multiclass Minimum Barrier Distance segmentation algorithm",
     long_description=long_description,
@@ -70,6 +70,9 @@ setup(
         "pybind11>=2.6.0",
         "pillow>=8.0.0",  # Added PIL dependency
     ],
+    project_urls={
+        "Source": "https://github.com/Mvzvrt/minimum-barrier-distance"
+    },
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Science/Research",
