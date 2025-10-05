@@ -55,13 +55,14 @@ except FileNotFoundError:
     long_description = ""
 
 setup(
-    name="mc-mbd",  # Package name changed to mc-mbd
-    version="0.1.0",
+    name="mc_mbd",
+    version="0.1.1",
     author="Mvzvrt",
     description="Multiclass Minimum Barrier Distance segmentation algorithm",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    packages=find_packages(),  # Automatically include all packages in mbd/
+    # Include both the new package name and the legacy package name for compatibility
+    packages=find_packages(),
     ext_modules=ext_modules,
     python_requires=">=3.9",
     install_requires=[

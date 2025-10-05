@@ -1,7 +1,7 @@
-# mc-mbd: Multiclass Minimum Barrier Distance Segmentation
+# mc_mbd: Multiclass Minimum Barrier Distance Segmentation
 
 <p align="left">
-  <a href="https://pypi.org/project/mc-mbd/"><img src="https://img.shields.io/pypi/v/mc-mbd.svg" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/mc_mbd/"><img src="https://img.shields.io/pypi/v/mc_mbd.svg" alt="PyPI version"></a>
   <a href="https://github.com/Mvzvrt/minimum-barrier-distance/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Mvzvrt/minimum-barrier-distance.svg" alt="License"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.9%2B-blue.svg" alt="Python 3.9+"></a>
 
@@ -11,12 +11,39 @@
 
 **mc-mbd** is a fast, cross-platform implementation of the Multiclass Minimum Barrier Distance (MBD) algorithm for seeded image segmentation. It supports multi-label propagation and is accelerated by a C++ core with Python fallback. The package is installable via PyPI and works out-of-the-box for research and practical segmentation tasks.
 
-## Installation
+## Installation (pip)
 
-Install from PyPI:
+Install from PyPI (package name uses an underscore so it's importable):
 
 ```bash
-pip install mc-mbd
+pip install mc_mbd
+```
+
+After installing via pip you can import the library in Python (package name stays `mbd`):
+
+```python
+from mc_mbd import segment_image
+```
+
+## For Development (build from source)
+
+To build and develop locally:
+
+```bash
+# Create and activate a virtual environment
+python -m venv .mc_mbd
+# On Windows (PowerShell):
+.\.mc_mbd\Scripts\Activate.ps1
+# On Windows (cmd):
+.\.mc_mbd\Scripts\activate.bat
+# On macOS/Linux:
+source .mc_mbd/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Build the C++ core extension in-place
+python setup.py build_ext --inplace
 ```
 
 ## Performance
@@ -34,10 +61,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Quick Usage Example
 
 ```python
-import mbd
+# If installed from PyPI:
+from mc_mbd import segment_image
 import numpy as np
 # image: 2D numpy array, seeds: integer mask (0=unlabeled, 1=background, 2+=foreground)
-labels = mbd.segment_image(image, seeds)
+labels = segment_image(image, seeds)
 ```
 
 ## License

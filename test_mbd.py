@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 import argparse
-import mbd
+from mc_mbd import segment_image
 
 def load_and_preprocess_image(image_path):
     """Load and preprocess an image for segmentation."""
@@ -97,7 +97,7 @@ def main():
     
     # Run segmentation
     print("Running MBD segmentation...")
-    labels = mbd.segment_image(image, seeds)
+    labels = segment_image(image, seeds)
     
     # Verify the results maintain seed labels
     seed_positions = seeds > 0

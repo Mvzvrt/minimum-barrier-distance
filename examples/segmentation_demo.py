@@ -7,7 +7,7 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
-from mbd import segment_image
+from mc_mbd import segment_image
 
 def create_seeds(image_shape, margin=15, object_size=20):
     """Create seeds for background and multiple objects."""

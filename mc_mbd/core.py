@@ -1,5 +1,5 @@
 """
-Core functionality for Minimum Barrier Distance segmentation.
+Core functionality for Minimum Barrier Distance segmentation (mc_mbd package).
 """
 
 from pathlib import Path
@@ -7,36 +7,11 @@ from typing import Optional
 
 import numpy as np
 from PIL import Image
-import mbd_core  # C++ extension
+import mbd_core  # C++ extension (same compiled module name)
 
 def segment_image(image: np.ndarray, seeds: np.ndarray, connectivity: int = 4) -> np.ndarray:
     """
     Perform image segmentation using Minimum Barrier Distance.
-
-    Parameters:
-    ----------
-    image : np.ndarray
-        Input grayscale image as float32 array in range [0,1]
-        Shape: [height, width]
-        
-    seeds : np.ndarray
-        Seed mask as int32 array with labels:
-        - 0: unlabeled regions
-        - 1: background
-        - 2+: object segments
-        Must have same shape as image.
-        
-    connectivity : int, optional
-        Neighborhood connectivity, either 4 or 8
-        Default: 4
-
-    Returns:
-    -------
-    np.ndarray
-        Label map where each pixel is assigned to the closest seed point
-        according to the minimum barrier distance.
-        Shape: same as input image
-        dtype: int32
     """
     # Input validation
     if image.shape != seeds.shape:
@@ -59,26 +34,6 @@ def segment_image(image: np.ndarray, seeds: np.ndarray, connectivity: int = 4) -
 def process_image_file(image_path: str, seeds: np.ndarray, connectivity: int = 4) -> np.ndarray:
     """
     Load an image file and perform segmentation using Minimum Barrier Distance.
-
-    Parameters:
-    ----------
-    image_path : str
-        Path to the input image file
-        
-    seeds : np.ndarray
-        Seed mask as int32 array with labels:
-        - 0: unlabeled regions
-        - 1: background
-        - 2+: object segments
-        
-    connectivity : int, optional
-        Neighborhood connectivity, either 4 or 8
-        Default: 4
-
-    Returns:
-    -------
-    np.ndarray
-        Label map from segmentation
     """
     # Load and convert image to grayscale
     img = Image.open(image_path)

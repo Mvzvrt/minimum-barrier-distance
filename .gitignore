@@ -38,6 +38,19 @@ mbd_core.*
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
+
+# Miscellaneous
+*.zip
+*.pyd
+*.npy
+*.npz
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+*.DS_Store
+Thumbs.db
 !.vscode/launch.json
 !.vscode/extensions.json
 *.code-workspace
@@ -76,3 +89,5 @@ test_outputs/
 mbd.zip
 
 benchmark.py
+mbd/
+examples/
